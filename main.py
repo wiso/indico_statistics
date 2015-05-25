@@ -1,16 +1,17 @@
 import hashlib
 import hmac
 import urllib
+import re
 import time
 import numpy as np
 import pandas
 import requests
-from threading import Thread, Lock
+from threading import Thread
 from Queue import Queue
 from memoizer import memoized
 from config import API_KEY, SECRET_KEY, BASE_URL
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s %(asctime)s %(threadName)s: %(message)s')
 logging.getLogger("requests").setLevel(logging.WARNING)
 
 
@@ -46,7 +47,7 @@ def get_all_meeting_from_category(id_category, start, stop):
     logging.info("query all event in category %s", id_category)
     r = requests.get(url)
     if not r.status_code == requests.codes.ok:
-        raise IOError("cannot connect")
+        raise IOError("cannot connect to %s" % url)
     logging.info("query category good")
     return r
 
@@ -98,9 +99,9 @@ def reporter(queue, total):
         message = queue.get()
         if 'done' in message:
             i += 1
-            print i, total
+            logging.info('%s, %s', i, total)
         else:
-            print message
+            logging.info('%s', message)
         queue.task_done()
 
 
@@ -114,6 +115,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
     logging.info("creating threads")
     for i in xrange(50):
         t = ThreadMeeting(queue, out_queue, message_queue)
+        t.setName('thread-category-%s-%d' % (category, i))
         t.setDaemon(True)
         t.start()
 
@@ -128,13 +130,13 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
     nevents = 0
     logging.info("populating queues")
     for d in data_categories['results']:
-        if meeting_title.lower() in d['title'].lower():
+        if meeting_title.search(d['title']):
             nevents += 1
             id_event = d['id']
             queue.put(id_event)
     logging.info("%d events in queue" % nevents)
 
-    r = Thread(target=reporter, args=(message_queue, nevents))
+    r = Thread(target=reporter, args=(message_queue, nevents), name='thread-reporter')
     r.setDaemon(True)
     r.start()
 
@@ -143,7 +145,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
 
     logging.info('merging %d output', len(out_queue.queue))
     for result_meeting, result_contributions in out_queue.queue:
-        result_meeting['my_title'] = [meeting_title]
+        result_meeting['my_title'] = [output_file]
         if table_meetings is None:
             table_meetings = result_meeting
         else:
@@ -173,18 +175,20 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
 
 if __name__ == "__main__":
 
-    start = '2014-01-01'
+    start = '2010-01-01'
     to = '2015-05-31'
 
-    inputs = (('490', 'egamma calibration', 'egamma_calibration'),
-              ('490', 'Photon ID', 'photon_id'),
-              ('490', 'T&P', 'tp'),
-              ('490', 'Egamma meeting', 'egamma'),
-              ('6139', 'HSG1', 'HSG1'))
+    inputs = (('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
+              ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
+              ('490', re.compile('T&P', re.IGNORECASE), 'tp'),
+              ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
+              ('6139', re.compile('HSG1', re.IGNORECASE), 'HSG1'),
+              ('6139', re.compile('HSG3', re.IGNORECASE), 'HSG3'))
 
     threads = []
     for input in inputs:
-        t = Thread(target=job, args=(start, to, API_KEY, SECRET_KEY, input[0], input[1], input[2], BASE_URL))
+        t = Thread(target=job, args=(start, to, API_KEY, SECRET_KEY, input[0], input[1], input[2], BASE_URL),
+                   name='thread-meeting-%s' % input[2])
         threads.append(t)
         t.start()
 
