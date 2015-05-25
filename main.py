@@ -5,8 +5,10 @@ import time
 import numpy as np
 import pandas
 import requests
-from threading import Thread
+from threading import Thread, Lock
 from Queue import Queue
+from memoizer import memoized
+from config import API_KEY, SECRET_KEY, BASE_URL
 import logging
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -33,6 +35,20 @@ def build_indico_request(path, params, api_key=None, secret_key=None, only_publi
 def copy_dict(d, *keys):
     """Make a copy of only the `keys` from dictionary `d`."""
     return {key: d[key] for key in keys}
+
+
+@memoized
+def get_all_meeting_from_category(id_category, start, stop):
+    url = BASE_URL + build_indico_request('/export/categ/%s.json' % id_category,
+                                          {'from': start, 'to': stop},
+                                          API_KEY, SECRET_KEY)
+
+    logging.info("query all event in category %s", id_category)
+    r = requests.get(url)
+    if not r.status_code == requests.codes.ok:
+        raise IOError("cannot connect")
+    logging.info("query category good")
+    return r
 
 
 def get_info_meeting(id_event):
@@ -88,16 +104,8 @@ def reporter(queue, total):
         queue.task_done()
 
 
-def main(start, stop, API_KEY, SECRET_KEY, category, meeting_title, BASE_URL="https://indico.cern.ch"):
-
-    url = BASE_URL + build_indico_request('/export/categ/%s.json' % category,
-                                          {'from': start, 'to': stop},
-                                          API_KEY, SECRET_KEY)
-
-    logging.info("query all event in category %s", category)
-    r = requests.get(url)
-    if not r.status_code == requests.codes.ok:
-        raise IOError("cannot connect")
+def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, BASE_URL="https://indico.cern.ch"):
+    r = get_all_meeting_from_category(category, start, stop)
 
     queue = Queue()
     out_queue = Queue()
@@ -111,6 +119,8 @@ def main(start, stop, API_KEY, SECRET_KEY, category, meeting_title, BASE_URL="ht
 
     data_categories = r.json()
     logging.info("found %d events in category" % len(data_categories['results']))
+    if len(data_categories['results']) == 0:
+        logging.warning("no event in category %d" % category)
 
     table_meetings = None
     table_contributions = None
@@ -149,25 +159,34 @@ def main(start, stop, API_KEY, SECRET_KEY, category, meeting_title, BASE_URL="ht
     pd_meeting = pandas.DataFrame.from_dict(table_meetings)
     pd_contribution = pandas.DataFrame.from_dict(table_contributions)
 
+    if len(pd_meeting) == 0:
+        logging.info("no events found")
+        return
+
     pd_meeting = pd_meeting.set_index('id_meeting')
     pd_contribution = pd_contribution.set_index('id_contribution')
 
     logging.info("writing")
-    pd_meeting.to_pickle('%s_meeting.pkl' % meeting_title)
-    pd_contribution.to_pickle('%s_contributions.pkl' % meeting_title)
+    pd_meeting.to_pickle('%s_meeting.pkl' % output_file)
+    pd_contribution.to_pickle('%s_contributions.pkl' % output_file)
     logging.info("done")
 
 if __name__ == "__main__":
-    from config import API_KEY, SECRET_KEY, BASE_URL
-    start = '2010-01-01'
+
+    start = '2014-01-01'
     to = '2015-05-31'
-    meeting_title = 'egamma calibration'
-    meeting_title = 'Photon ID'
-    meeting_title = 'T&P'
-    meeting_title = 'Egamma meeting'
-    #category = '490'
 
-    meeting_title = "HSG1"
-    category = '6139'
+    inputs = (('490', 'egamma calibration', 'egamma_calibration'),
+              ('490', 'Photon ID', 'photon_id'),
+              ('490', 'T&P', 'tp'),
+              ('490', 'Egamma meeting', 'egamma'),
+              ('6139', 'HSG1', 'HSG1'))
 
-    main(start, to, API_KEY, SECRET_KEY, category, meeting_title, BASE_URL)
+    threads = []
+    for input in inputs:
+        t = Thread(target=job, args=(start, to, API_KEY, SECRET_KEY, input[0], input[1], input[2], BASE_URL))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
