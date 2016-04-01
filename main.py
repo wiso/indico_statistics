@@ -175,8 +175,9 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
 
 if __name__ == "__main__":
 
-    start = '2010-01-01'
-    to = '2015-05-31'
+    start = '2014-01-01'
+    import datetime
+    to = datetime.datetime.now().strftime("%Y-%m-%d")
 
     inputs = (('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
               ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
