@@ -59,7 +59,7 @@ if __name__ == "__main__":
     def work(x):
         result = f(x)
         with lock_write:
-            print current_thread(), x, result
+            print(current_thread(), x, result)
 
     work(1)
     work(1)
@@ -84,4 +84,4 @@ if __name__ == "__main__":
     for t in threads:
         t.join()
 
-    print time.time() - start
+    print(time.time() - start)

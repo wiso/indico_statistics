@@ -1,13 +1,13 @@
 import hashlib
 import hmac
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import re
 import time
 import numpy as np
 import pandas
 import requests
 from threading import Thread
-from Queue import Queue
+from queue import Queue
 from memoizer import memoized
 from config import API_KEY, SECRET_KEY, BASE_URL
 import logging
@@ -16,7 +16,7 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 
 
 def build_indico_request(path, params, api_key=None, secret_key=None, only_public=False, persistent=False):
-    items = params.items() if hasattr(params, 'items') else list(params)
+    items = list(params.items()) if hasattr(params, 'items') else list(params)
     if api_key:
         items.append(('ak', api_key))
     if only_public:
@@ -25,12 +25,12 @@ def build_indico_request(path, params, api_key=None, secret_key=None, only_publi
         if not persistent:
             items.append(('timestamp', str(int(time.time()))))
         items = sorted(items, key=lambda x: x[0].lower())
-        url = '%s?%s' % (path, urllib.urlencode(items))
-        signature = hmac.new(secret_key, url, hashlib.sha1).hexdigest()
+        url = '%s?%s' % (path, urllib.parse.urlencode(items))
+        signature = hmac.new(secret_key.encode(), url.encode(), hashlib.sha1).hexdigest()
         items.append(('signature', signature))
     if not items:
         return path
-    return '%s?%s' % (path, urllib.urlencode(items))
+    return '%s?%s' % (path, urllib.parse.urlencode(items))
 
 
 def copy_dict(d, *keys):
@@ -113,7 +113,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
     message_queue = Queue()
 
     logging.info("creating threads")
-    for i in xrange(50):
+    for i in range(50):
         t = ThreadMeeting(queue, out_queue, message_queue)
         t.setName('thread-category-%s-%d' % (category, i))
         t.setDaemon(True)
@@ -122,7 +122,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
     data_categories = r.json()
     logging.info("found %d events in category" % len(data_categories['results']))
     if len(data_categories['results']) == 0:
-        logging.warning("no event in category %d" % category)
+        logging.warning("no event in category %s" % category)
 
     table_meetings = None
     table_contributions = None
@@ -134,6 +134,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
             nevents += 1
             id_event = d['id']
             queue.put(id_event)
+
     logging.info("%d events in queue" % nevents)
 
     r = Thread(target=reporter, args=(message_queue, nevents), name='thread-reporter')
@@ -175,16 +176,25 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
 
 if __name__ == "__main__":
 
-    start = '2014-01-01'
+    start = '2017-04-01'
     import datetime
     to = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    inputs = (('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
-              ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
-              ('490', re.compile('T&P', re.IGNORECASE), 'tp'),
-              ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
-              ('6139', re.compile('HSG1', re.IGNORECASE), 'HSG1'),
-              ('6139', re.compile('HSG3', re.IGNORECASE), 'HSG3'))
+    inputs = (#('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
+              #('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
+              #('490', re.compile('T&P', re.IGNORECASE), 'tp'),
+              #('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
+              #('6139', re.compile('HSG1', re.IGNORECASE), 'HSG1'),
+              #('6139', re.compile('HSG3', re.IGNORECASE), 'HSG3'),
+        ('6142', re.compile('HGam Coupling meeting', re.IGNORECASE), 'HGam_coupling'),
+        ('6142', re.compile('HGam Fiducial', re.IGNORECASE), 'HGam_xsection'),
+#        ('6142', re.compile('hh->bbyy', re.IGNORECASE), 'HGam_yybb'),
+        ('6142', re.compile('Zgamma', re.IGNORECASE), 'HGam_Zgamma'),
+        ('6142', re.compile('Hyy\+MET', re.IGNORECASE), 'HGam_yyMET'),
+        ('6142', re.compile('HGam sub-group meeting', re.IGNORECASE), 'HGam_plenary'),
+        ('6142', re.compile('High-Low-mass diphoton', re.IGNORECASE), 'HGam_yysearch'),
+#        ('4162', re.compile('WWgamgam', re.IGNORECASE), 'HGam_yyWW'),
+    )
 
     threads = []
     for input in inputs:
