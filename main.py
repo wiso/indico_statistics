@@ -45,6 +45,7 @@ def get_all_meeting_from_category(id_category, start, stop):
                                           API_KEY, SECRET_KEY)
 
     logging.info("query all event in category %s", id_category)
+    logging.debug('request = %s', url)
     r = requests.get(url)
     if not r.status_code == requests.codes.ok:
         raise IOError("cannot connect to %s" % url)
@@ -134,6 +135,8 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
             nevents += 1
             id_event = d['id']
             queue.put(id_event)
+        else:
+            logging.info('"%s" id=%s cannot match regex %s' % (d['title'], d['id'], meeting_title))
 
     logging.info("%d events in queue" % nevents)
 
@@ -176,7 +179,7 @@ def job(start, stop, API_KEY, SECRET_KEY, category, meeting_title, output_file, 
 
 if __name__ == "__main__":
 
-    start = '2017-04-01'
+    start = '2017-01-01'
     import datetime
     to = datetime.datetime.now().strftime("%Y-%m-%d")
 
@@ -191,8 +194,8 @@ if __name__ == "__main__":
 #        ('6142', re.compile('hh->bbyy', re.IGNORECASE), 'HGam_yybb'),
         ('6142', re.compile('Zgamma', re.IGNORECASE), 'HGam_Zgamma'),
         ('6142', re.compile('Hyy\+MET', re.IGNORECASE), 'HGam_yyMET'),
-        ('6142', re.compile('HGam sub-group meeting', re.IGNORECASE), 'HGam_plenary'),
-        ('6142', re.compile('High-Low-mass diphoton', re.IGNORECASE), 'HGam_yysearch'),
+        ('6142', re.compile('^HGamma$|HGam sub-group meeting', re.IGNORECASE), 'HGam_plenary'),
+        ('6142', re.compile('High-mass diphotons|High-Low-mass diphoton', re.IGNORECASE), 'HGam_yysearch'),
 #        ('4162', re.compile('WWgamgam', re.IGNORECASE), 'HGam_yyWW'),
     )
 
