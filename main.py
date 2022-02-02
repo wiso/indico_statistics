@@ -87,7 +87,7 @@ def get_info_meeting(id_event):
             result_contributions["speaker"].append("NO SPEAKER")
         result_contributions["duration"].append(dc["duration"])
         result_contributions["title"].append(dc["title"])
-        result_contributions["id_contribution"].append(data_event["id"])
+        result_contributions["id_contribution"].append(dc["id"])
         result_contributions["id_meeting"].append(data_event["id"])
 
     return result_meeting, result_contributions
@@ -206,23 +206,28 @@ if __name__ == "__main__":
     to = datetime.datetime.now().strftime("%Y-%m-%d")
 
     inputs = (
-        # ('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
-        # ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
-        ('490', re.compile('T&P', re.IGNORECASE), 'tp'),
-        # ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
+        ('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
+        ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
+        ("490", re.compile("Electron identification", re.IGNORECASE), "electron_id"),
+        ("490", re.compile("T&P software", re.IGNORECASE), "tp_software"),
+        ("490", re.compile("Informal ML", re.IGNORECASE), "informal_ml"),
+        ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
         # ('6139', re.compile('HSG1', re.IGNORECASE), 'HSG1'),
         # ('6139', re.compile('HSG3', re.IGNORECASE), 'HSG3'),
-        # ("6142", re.compile("HGam Coupling meeting", re.IGNORECASE), "HGam_coupling"),
-        # ("6142", re.compile("HGam Fiducial", re.IGNORECASE), "HGam_xsection"),
-        # ('6142', re.compile('hh->bbyy', re.IGNORECASE), 'HGam_yybb'),
-        # ("6142", re.compile("Zgamma", re.IGNORECASE), "HGam_Zgamma"),
-        # ("6142", re.compile("Hyy\+MET", re.IGNORECASE), "HGam_yyMET"),
-        # ("6142", re.compile("^HGamma$|HGam sub-group meeting", re.IGNORECASE), "HGam_plenary"),
-        # (
+        #("6142", re.compile("HGam Coupling meeting", re.IGNORECASE), "HGam_coupling"),
+        #("6142", re.compile("HGam Fiducial", re.IGNORECASE), "HGam_xsection"),
+        #("6142", re.compile("VBF H", re.IGNORECASE), "HGam_VBF"),
+        #("6142", re.compile("Hyy+MET", re.IGNORECASE), "HGam_MET"),
+        #("6142", re.compile("Zgamma", re.IGNORECASE), "HGam_Zgamma"),
+        #("6142", re.compile("Mass", re.IGNORECASE), "HGam_mass"),
+        #("6142", re.compile("ttH", re.IGNORECASE), "HGam_ttH"),
+        #("6142", re.compile("Hyy\+MET", re.IGNORECASE), "HGam_yyMET"),
+        #("6142", re.compile("^HGamma$|HGam sub-group meeting", re.IGNORECASE), "HGam_plenary"),
+        #(
         #    "6142",
         #    re.compile("High-mass diphotons|High-Low-mass diphoton", re.IGNORECASE),
         #    "HGam_yysearch",
-        # ),
+        #),
         #        ('4162', re.compile('WWgamgam', re.IGNORECASE), 'HGam_yyWW'),
     )
 
