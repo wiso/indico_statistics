@@ -200,15 +200,15 @@ def job(
 
 if __name__ == "__main__":
 
-    start = "2019-01-01"
+    start = "2014-01-01"
     import datetime
 
     to = datetime.datetime.now().strftime("%Y-%m-%d")
 
     inputs = (
-        ('490', re.compile('egamma calibration', re.IGNORECASE), 'egamma_calibration'),
+        ('490', re.compile('egamma calibration', re.IGNORECASE), 'calibration'),
         ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
-        ("490", re.compile("Electron identification", re.IGNORECASE), "electron_id"),
+        ("490", re.compile("Electron identification|Egamma T&P", re.IGNORECASE), "electron_id"),
         ("490", re.compile("T&P software", re.IGNORECASE), "tp_software"),
         ("490", re.compile("Informal ML", re.IGNORECASE), "informal_ml"),
         ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
