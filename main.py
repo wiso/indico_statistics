@@ -1,15 +1,12 @@
-import hashlib
-import hmac
 import urllib.request, urllib.parse, urllib.error
 import re
-import time
 import numpy as np
 import pandas
 import requests
 from threading import Thread
 from queue import Queue
 from memoizer import memoized
-from config import API_KEY, SECRET_KEY, BASE_URL
+from config import BASE_URL, TOKEN
 import logging
 
 logging.basicConfig(
@@ -18,24 +15,22 @@ logging.basicConfig(
 logging.getLogger("requests").setLevel(logging.WARNING)
 
 
-def build_indico_request(
-    path, params, api_key=None, secret_key=None, only_public=False, persistent=False
-):
-    items = list(params.items()) if hasattr(params, "items") else list(params)
-    if api_key:
-        items.append(("ak", api_key))
-    if only_public:
-        items.append(("onlypublic", "yes"))
-    if secret_key:
-        if not persistent:
-            items.append(("timestamp", str(int(time.time()))))
-        items = sorted(items, key=lambda x: x[0].lower())
-        url = "%s?%s" % (path, urllib.parse.urlencode(items))
-        signature = hmac.new(secret_key.encode(), url.encode(), hashlib.sha1).hexdigest()
-        items.append(("signature", signature))
-    if not items:
-        return path
-    return "%s?%s" % (path, urllib.parse.urlencode(items))
+class BearerAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
+
+    def __call__(self, r):
+        r.headers["authorization"] = "Bearer " + self.token
+        return r
+
+
+def create_request(BASE_URL, query, params, token):
+    url = urllib.parse.urljoin(BASE_URL, query)
+    r = requests.get(url, params=params, auth=BearerAuth(token))
+    if not r.status_code == requests.codes.ok:
+        raise IOError("cannot connect to %s" % r.url)
+
+    return r
 
 
 def copy_dict(d, *keys):
@@ -45,24 +40,19 @@ def copy_dict(d, *keys):
 
 @memoized
 def get_all_meeting_from_category(id_category, start, stop):
-    url = BASE_URL + build_indico_request(
-        "/export/categ/%s.json" % id_category, {"from": start, "to": stop}, API_KEY, SECRET_KEY
+    r = create_request(
+        BASE_URL, "export/categ/%s.json" % id_category, {"from": start, "to": stop}, TOKEN
     )
 
     logging.info("query all event in category %s", id_category)
-    logging.debug("request = %s", url)
-    r = requests.get(url)
-    if not r.status_code == requests.codes.ok:
-        raise IOError("cannot connect to %s" % url)
-    logging.info("query category good")
-    return r
+    logging.debug("request = %s", r.url)
+    logging.debug("query category good")
+    return r.json()
 
 
 def get_info_meeting(id_event):
-    url = BASE_URL + build_indico_request(
-        "/export/event/%s.json" % id_event, {"detail": "contributions"}, API_KEY, SECRET_KEY
-    )
-    r = requests.get(url)
+    r = create_request(BASE_URL, "export/event/%s.json" % id_event, {"detail": "contributions"}, TOKEN)
+
     data_event = r.json()["results"][0]
     data_contributions = data_event["contributions"]
 
@@ -127,7 +117,7 @@ def job(
     meeting_title,
     output_file,
 ):
-    r = get_all_meeting_from_category(category, start, stop)
+    data_categories = get_all_meeting_from_category(category, start, stop)
 
     queue = Queue()
     out_queue = Queue()
@@ -136,14 +126,13 @@ def job(
     logging.info("creating threads")
     for i in range(50):
         t = ThreadMeeting(queue, out_queue, message_queue)
-        t.setName("thread-category-%s-%d" % (category, i))
-        t.setDaemon(True)
+        t.name = "thread-category-%s-%d" % (category, i)
+        t.daemon = True
         t.start()
 
-    data_categories = r.json()
-    logging.info("found %d events in category" % len(data_categories["results"]))
+    logging.info("found %d events in category", len(data_categories["results"]))
     if len(data_categories["results"]) == 0:
-        logging.warning("no event in category %s" % category)
+        logging.warning("no event in category %s", category)
 
     table_meetings = None
     table_contributions = None
@@ -156,12 +145,12 @@ def job(
             id_event = d["id"]
             queue.put(id_event)
         else:
-            logging.info('"%s" id=%s cannot match regex %s' % (d["title"], d["id"], meeting_title))
+            logging.info('"%s" id=%s cannot match regex %s',  d["title"], d["id"], meeting_title)
 
-    logging.info("%d events in queue" % nevents)
+    logging.info("%d events in queue", nevents)
 
     r = Thread(target=reporter, args=(message_queue, nevents), name="thread-reporter")
-    r.setDaemon(True)
+    r.daemon = True
     r.start()
 
     queue.join()
@@ -206,28 +195,28 @@ if __name__ == "__main__":
     to = datetime.datetime.now().strftime("%Y-%m-%d")
 
     inputs = (
-        ('490', re.compile('egamma calibration', re.IGNORECASE), 'calibration'),
-        ('490', re.compile('Photon ID', re.IGNORECASE), 'photon_id'),
+        ("490", re.compile("egamma calibration", re.IGNORECASE), "calibration"),
+        ("490", re.compile("Photon ID", re.IGNORECASE), "photon_id"),
         ("490", re.compile("Electron identification|Egamma T&P", re.IGNORECASE), "electron_id"),
         ("490", re.compile("T&P software", re.IGNORECASE), "tp_software"),
         ("490", re.compile("Informal ML", re.IGNORECASE), "informal_ml"),
-        ('490', re.compile('Egamma meeting', re.IGNORECASE), 'egamma'),
+        ("490", re.compile("Egamma meeting", re.IGNORECASE), "egamma"),
         # ('6139', re.compile('HSG1', re.IGNORECASE), 'HSG1'),
         # ('6139', re.compile('HSG3', re.IGNORECASE), 'HSG3'),
-        #("6142", re.compile("HGam Coupling meeting", re.IGNORECASE), "HGam_coupling"),
-        #("6142", re.compile("HGam Fiducial", re.IGNORECASE), "HGam_xsection"),
-        #("6142", re.compile("VBF H", re.IGNORECASE), "HGam_VBF"),
-        #("6142", re.compile("Hyy+MET", re.IGNORECASE), "HGam_MET"),
-        #("6142", re.compile("Zgamma", re.IGNORECASE), "HGam_Zgamma"),
-        #("6142", re.compile("Mass", re.IGNORECASE), "HGam_mass"),
-        #("6142", re.compile("ttH", re.IGNORECASE), "HGam_ttH"),
-        #("6142", re.compile("Hyy\+MET", re.IGNORECASE), "HGam_yyMET"),
-        #("6142", re.compile("^HGamma$|HGam sub-group meeting", re.IGNORECASE), "HGam_plenary"),
-        #(
+        # ("6142", re.compile("HGam Coupling meeting", re.IGNORECASE), "HGam_coupling"),
+        # ("6142", re.compile("HGam Fiducial", re.IGNORECASE), "HGam_xsection"),
+        # ("6142", re.compile("VBF H", re.IGNORECASE), "HGam_VBF"),
+        # ("6142", re.compile("Hyy+MET", re.IGNORECASE), "HGam_MET"),
+        # ("6142", re.compile("Zgamma", re.IGNORECASE), "HGam_Zgamma"),
+        # ("6142", re.compile("Mass", re.IGNORECASE), "HGam_mass"),
+        # ("6142", re.compile("ttH", re.IGNORECASE), "HGam_ttH"),
+        # ("6142", re.compile("Hyy\+MET", re.IGNORECASE), "HGam_yyMET"),
+        # ("6142", re.compile("^HGamma$|HGam sub-group meeting", re.IGNORECASE), "HGam_plenary"),
+        # (
         #    "6142",
         #    re.compile("High-mass diphotons|High-Low-mass diphoton", re.IGNORECASE),
         #    "HGam_yysearch",
-        #),
+        # ),
         #        ('4162', re.compile('WWgamgam', re.IGNORECASE), 'HGam_yyWW'),
     )
 
